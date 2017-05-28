@@ -3,7 +3,7 @@ function [ outFrames, amplitude, phase, numFrames ] = interpolateFrames( nextFra
     L = 5; %pyramid levels
     LAMBDA = 1.2;
     TAU = 0.2;
-    BANDS = 2;
+    BANDS = 8;
     
     STEP = 0.1;
 
