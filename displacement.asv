@@ -1,5 +1,7 @@
 L = 5; %pyramid levels
 LAMBDA = 1.2;
+TAU = 0.2;
+STEP = 0.1;
 
 v = VideoReader('xylophone.mp4');
 v.CurrentTime = 0;
@@ -12,60 +14,82 @@ clear currentPhase prevPhase
 
 while hasFrame(v) && frameCount < 2
     
-    frame = im2double(readFrame(v));
+    frame = readFrame(v);
 
     %RGB channels
-    for i=1:3
-        [pyr,pind] = buildSCFpyr(frame(:,:,i),L,1);
+%     for i=1:3
+%         [pyr,pind] = buildSCFpyr(frame(:,:,i),L,1);
+% 
+%         if ~exist('currentPhase', 'var')
+%             currentPhase = zeros([size(pyr,1), 3]);
+%         end
+%         
+% %         showSpyr(pyr, pind);
+%         
+%         currentPhase(:,i) = angle(pyr);
+%     end
 
-        if ~exist('currentPhase', 'var')
-            currentPhase = zeros([size(pyr,1), 3]);
-        end
-        
-%         showSpyr(pyr, pind);
-        
-        currentPhase(:,i) = angle(pyr);
-
-    end
+    %TODO: for all channels ?
+    [pyr,pind] = buildSCFpyr(im2double(rgb2gray(frame)),L,1);
+    currentAmplitude = abs(pyr);
+    currentPhase = angle(pyr);
     
     if exist('prevPhase', 'var')
         phaseDiff = prevPhase - currentPhase;
         diff = atan2(sin(phaseDiff),cos(phaseDiff));
         
-        clear prevPhaseBand1 prevPhaseBand2
+        phiHat = zeros(size(currentPhase));
+        clear prevPhaseBand1
         
         numLevels = spyrHt(pind);
         for currentLevel = numLevels:-1:2 %1 is high freq. residuals
-            phaseBand1 = spyrBand(currentPhase, pind, currentLevel, 1);
-            phaseBand2 = spyrBand(currentPhase, pind, currentLevel, 2);
+            %TODO: for all bands
+            numBands = spyrNumBands(pind);
             
-            if exist('prevPhaseBand1', 'var')
+            phaseBand1 = spyrBand(currentPhase, pind, currentLevel, 1);
+
+            if exist('prevLevelPhaseBand1', 'var')
                 %Band 1
-                resizedBand = imresize(prevPhaseBand1, size(phaseBand1));
-                phaseDiff = resizedBand - LAMBDA * phaseBand1;
+                resizedPrevLevelBand1 = imresize(prevLevelPhaseBand1, size(phaseBand1));
+                phaseDiff = resizedPrevLevelBand1 - LAMBDA * phaseBand1;
                 phi = atan2(sin(phaseDiff),cos(phaseDiff));
                 
-                indices = abs(phi) > pi/2;
-                phaseBand1(indices) = resizedBand(indices);
-                
-                %Band 2
-                resizedBand = imresize(prevPhaseBand2, size(phaseBand2));
-                phaseDiff = resizedBand - LAMBDA * phaseBand2;
-                phi = atan2(sin(phaseDiff),cos(phaseDiff));
+                %TODO
+%                 phiLimit = TAU * pi * LAMBDA ^ (numLevels - currentLevel);
+%                 resizedPrevBand1 > phiLimit
                 
                 indices = abs(phi) > pi/2;
-                phaseBand2(indices) = resizedBand(indices);
+                resizedPrevLevelBand1(indices) = phaseBand1(indices);
+                
+                %Adjust phase
+                currentLevelDiff = spyrBand(diff, pind, currentLevel, 1);
+                maxValue = ceil(size(phaseBand1, 1) / 2);
+                allValues = zeros([size(currentLevelDiff),maxValue+1]);
+                for gamma = 0:1:maxValue; 
+                    allValues(:,:,gamma+1) = (resizedPrevLevelBand1 - (currentLevelDiff + gamma * 2 *pi)) .* (resizedPrevLevelBand1 - (currentLevelDiff + gamma * 2 *pi));
+                end
+                %second 1 is current band
+                currentIndices = pyrBandIndices(pind,1 + 1 + numBands*(currentLevel-1));
+                [~, gammaStar] = min(allValues, [], 3);
+                phiHat(currentIndices) = currentLevelDiff + (2*(gammaStar-1)*pi);
             end
             
-            %Inside abo
-            prevPhaseBand1 = phaseBand1;
-            prevPhaseBand2 = phaseBand2;
+
+            prevLevelPhaseBand1 = phaseBand1;
 
 %             subplot(2, numLevels, (currentLevel-1)*2 + 1);
 %             imshow(currentVal, []);
 %             subplot(2, numLevels, (currentLevel-1)*2 + 2);
 %             imshow(currentPhase, [-pi, pi]);
         end
+        
+        %Interpolate phase
+        for alpha = STEP:STEP:1-STEP
+            phiAlpha = prevPhase + alpha.*phiHat;
+            re
+        end
+            
+        
         drawnow
     end
     
