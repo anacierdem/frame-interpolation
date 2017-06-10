@@ -1,11 +1,13 @@
 function [ outFrames, amplitude, phase, numFrames ] = interpolateFrames( nextFrame, prevFrameAmplitude, prevFramePhase )
     %Parameters
-    L = 5; %pyramid levels
+    L = floor(log2(min(size(nextFrame)))) - 2; %pyramid levels - set to maximum possible
     LAMBDA = 1.2;
     TAU = 0.2;
     BANDS = 8;
     
     STEP = 0.1;
+    
+    maxValue = round(LAMBDA^L); %Search for best phase cannot be more than (num levels * scale factor)
 
     [pyr,pind] = buildSCFpyr(nextFrame,L,BANDS);
     currentAmplitude = abs(pyr);
@@ -19,10 +21,12 @@ function [ outFrames, amplitude, phase, numFrames ] = interpolateFrames( nextFra
 
         numLevels = spyrHt(pind);
         numBands = spyrNumBands(pind);
-        for currentLevel = 1:numLevels
+        for currentLevel = numLevels:-1:1
             
             for currentBand = 1:numBands
                 currentLevelPhase = spyrBand(currentPhase, pind, currentLevel, currentBand);
+                
+                phiLimit = TAU * pi * LAMBDA ^ (numLevels - currentLevel);
                 
                 if(currentLevel < numLevels-1)
                     coarserLevelPhase = imresize(spyrBand(currentPhase, pind, currentLevel+1, currentBand), size(currentLevelPhase));
@@ -30,10 +34,7 @@ function [ outFrames, amplitude, phase, numFrames ] = interpolateFrames( nextFra
                     %Shift correction
                     phaseDiff = currentLevelPhase - LAMBDA * coarserLevelPhase;
                     phi = atan2(sin(phaseDiff),cos(phaseDiff));
-
                     %Bounded phase shift
-                    phiLimit = TAU * pi * LAMBDA ^ (numLevels - currentLevel);
-
                     indicesToCorrect = abs(phi) > pi/2 | currentLevelPhase > phiLimit;
                     currentLevelPhase(indicesToCorrect) = LAMBDA * coarserLevelPhase(indicesToCorrect);
                 else
@@ -43,7 +44,7 @@ function [ outFrames, amplitude, phase, numFrames ] = interpolateFrames( nextFra
 
                 %Adjust phase
                 currentLevelDiff = spyrBand(diff, pind, currentLevel, currentBand);
-                maxValue = ceil(size(currentLevelPhase, 1) / 2);
+
                 allValues = zeros([size(currentLevelDiff),maxValue+1]);
                 for gamma = 0:1:maxValue; 
                     allValues(:,:,gamma+1) = (currentLevelPhase - (currentLevelDiff + gamma * 2 *pi)) .* (currentLevelPhase - (currentLevelDiff + gamma * 2 *pi));
